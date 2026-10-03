@@ -24,6 +24,22 @@ class User(UserMixin, db.Model):
     def check_password(self, password: str) -> bool:
         return check_password_hash(self.password_hash, password)
 
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
+
+    @property
+    def badge_abbr(self) -> str:
+        """挂牌人缩写：英文取首末字母大写，中文取前两字。"""
+        name = (self.username or "").strip()
+        if not name:
+            return "?"
+        if name.isascii():
+            if len(name) == 1:
+                return name.upper()
+            return (name[0] + name[-1]).upper()
+        return name[:2]
+
 
 class Plant(db.Model):
     __tablename__ = "plants"
@@ -62,6 +78,11 @@ class Pond(db.Model):
         back_populates="pond",
         cascade="all, delete-orphan",
     )
+    badges = db.relationship(
+        "ShiftBadge",
+        back_populates="pond",
+        cascade="all, delete-orphan",
+    )
 
 
 class SlakeBatch(db.Model):
@@ -75,3 +96,27 @@ class SlakeBatch(db.Model):
     notes = db.Column(db.Text, nullable=False, default="")
 
     pond = db.relationship("Pond", back_populates="batches")
+
+
+class ShiftBadge(db.Model):
+    """当班码牌：同一池同一时刻最多一张未摘牌。"""
+
+    __tablename__ = "shift_badges"
+    __table_args__ = (
+        db.Index(
+            "uq_shift_badge_open_per_pond",
+            "pond_id",
+            unique=True,
+            postgresql_where=db.text("removed_at IS NULL"),
+            sqlite_where=db.text("removed_at IS NULL"),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    pond_id = db.Column(db.Integer, db.ForeignKey("ponds.id"), nullable=False)
+    hanger_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    hung_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
+    removed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    pond = db.relationship("Pond", back_populates="badges")
+    hanger = db.relationship("User")

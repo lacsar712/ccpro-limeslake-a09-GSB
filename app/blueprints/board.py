@@ -1,9 +1,15 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.models import Plant, Pond
-from app.services.rules import RuleError, assert_can_set_pond_status, latest_batch_for_pond
+from app.services.rules import (
+    RuleError,
+    assert_can_set_pond_status,
+    assert_pond_badge_operator,
+    latest_batch_for_pond,
+    open_badge_for_pond,
+)
 
 bp = Blueprint("board", __name__, url_prefix="/board")
 
@@ -36,15 +42,18 @@ def floor_plan():
     pond_cards = []
     for pond in ponds:
         batch = latest_batch_for_pond(pond)
-        pond_cards.append({"pond": pond, "batch": batch})
+        badge = open_badge_for_pond(pond)
+        pond_cards.append({"pond": pond, "batch": batch, "badge": badge})
 
     selected_id = request.args.get("pond", type=int)
     selected = None
     selected_batch = None
+    selected_badge = None
     if selected_id:
         selected = next((c["pond"] for c in pond_cards if c["pond"].id == selected_id), None)
         if selected:
             selected_batch = latest_batch_for_pond(selected)
+            selected_badge = open_badge_for_pond(selected)
 
     return render_template(
         "board/floor.html",
@@ -53,6 +62,7 @@ def floor_plan():
         pond_cards=pond_cards,
         selected=selected,
         selected_batch=selected_batch,
+        selected_badge=selected_badge,
         status_labels=STATUS_LABELS,
     )
 
@@ -64,6 +74,15 @@ def pond_ops(pond_id: int):
     status = request.form.get("status") or pond.status
     peak_raw = (request.form.get("peak_temp_c") or "").strip()
     notes = (request.form.get("batch_notes") or "").strip()
+
+    try:
+        # 先核对当班码牌：无牌或非挂牌人一律拒绝，不做任何改动
+        assert_pond_badge_operator(pond, current_user, "登记峰值或更改池态")
+    except RuleError as exc:
+        flash(str(exc), "error")
+        return redirect(
+            url_for("board.floor_plan", plant_id=pond.plant_id, pond=pond.id)
+        )
 
     batch = latest_batch_for_pond(pond)
     if batch is None:
@@ -84,7 +103,7 @@ def pond_ops(pond_id: int):
     batch.notes = notes
 
     try:
-        assert_can_set_pond_status(pond, status)
+        assert_can_set_pond_status(pond, status, current_user)
         pond.status = status
         db.session.commit()
         flash(f"{pond.code} 已更新", "ok")

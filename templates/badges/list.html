@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}码牌台{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>当班码牌台</h1>
+    <p>熟化中 / 注水中的池须挂当班码牌；只有挂牌人本人（或管理员）能改该池池态、登记批次。</p>
+  </div>
+</header>
+
+<section class="panel badge-hang-panel">
+  <h2>挂牌</h2>
+  {% set hangable = ponds | selectattr('status', 'ne', 'drawn') | list %}
+  {% if hangable %}
+  <form method="post" action="{{ url_for('badges.hang') }}" class="badge-hang-form">
+    <label>熟化池（已出灰池禁止新挂）
+      <select name="pond_id" required>
+        {% for pond in hangable %}
+        <option value="{{ pond.id }}" {% if pond.id in badged_pond_ids %}disabled{% endif %}>
+          {{ pond.plant.name }} · {{ pond.code }}（{{ status_labels.get(pond.status, pond.status) }}{% if pond.id in badged_pond_ids %} · 已有牌须先摘{% endif %}）
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if current_user.role == 'admin' %}
+    <label>挂牌人（管理员可代挂）
+      <select name="hanger_id">
+        {% for user in users %}
+        <option value="{{ user.id }}" {% if user.id == current_user.id %}selected{% endif %}>
+          {{ user.username }}（{{ '管理员' if user.role == 'admin' else '操作工' }}）
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% else %}
+    <p class="hint">操作工只能给自己挂牌：{{ current_user.username }}</p>
+    {% endif %}
+    <div class="actions">
+      <button type="submit">挂牌</button>
+      <a class="btn ghost" href="{{ url_for('board.floor_plan') }}">返回平面图</a>
+    </div>
+  </form>
+  {% else %}
+  <p class="hint">暂无可挂牌的池（均已出灰）。</p>
+  {% endif %}
+</section>
+
+<section class="badge-board">
+  <h2>现行挂牌</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>厂区</th>
+        <th>池号</th>
+        <th>池态</th>
+        <th>挂牌人</th>
+        <th>挂牌时刻</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for badge in open_badges %}
+      <tr>
+        <td>{{ badge.pond.plant.name }}</td>
+        <td>{{ badge.pond.code }}</td>
+        <td><span class="badge badge-{{ badge.pond.status }}">{{ status_labels.get(badge.pond.status, badge.pond.status) }}</span></td>
+        <td>{{ badge.hanger.username }}{% if badge.hanger_id == current_user.id %}（本人）{% endif %}</td>
+        <td>{{ badge.hung_at.strftime('%Y-%m-%d %H:%M') if badge.hung_at else '—' }}</td>
+        <td>
+          {% if current_user.role == 'admin' or badge.hanger_id == current_user.id %}
+          <form method="post" action="{{ url_for('badges.remove', badge_id=badge.id) }}">
+            <button type="submit" class="btn ghost">摘牌</button>
+          </form>
+          {% else %}
+          <span class="hint">仅本人或管理员可摘</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">当前没有未摘的当班码牌</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -44,6 +44,9 @@
       data-action="click->board#openDrawer"
     >
       <span class="tile-code">{{ pond.code }}</span>
+      {% if card.badge %}
+      <span class="tile-badge" title="挂牌人：{{ card.badge.hanger.username }}">{{ card.badge.hanger.badge_abbr }}</span>
+      {% endif %}
       <span class="tile-status">{{ status_labels.get(pond.status, pond.status) }}</span>
       <span class="tile-meta">
         {% if batch and batch.peak_temp_c is not none %}
@@ -87,6 +90,18 @@
     </div>
 
     <div class="drawer-body">
+      <section class="batch-card">
+        <h3>当班码牌</h3>
+        {% if selected_badge %}
+        <dl class="kv">
+          <div><dt>挂牌人</dt><dd>{{ selected_badge.hanger.username }}</dd></div>
+          <div><dt>挂牌时刻</dt><dd>{{ selected_badge.hung_at.strftime('%Y-%m-%d %H:%M') if selected_badge.hung_at else '—' }}</dd></div>
+        </dl>
+        {% else %}
+        <p class="hint">未挂当班码牌：不能改池态或登记批次，请先到码牌台挂牌。</p>
+        {% endif %}
+      </section>
+
       <section class="batch-card">
         <h3>最近熟化批次</h3>
         {% if selected_batch %}

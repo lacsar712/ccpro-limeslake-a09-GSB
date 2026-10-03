@@ -1,5 +1,5 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.models import Plant, Pond
@@ -81,7 +81,7 @@ def edit_pond(pond_id: int):
             flash("同一厂区内池编号必须唯一", "error")
         else:
             try:
-                assert_can_set_pond_status(pond, status)
+                assert_can_set_pond_status(pond, status, current_user)
                 pond.plant_id = plant_id
                 pond.code = code
                 pond.status = status
