@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}码牌台{% endblock %}
+{% block content %}
+<section class="tags-page">
+  <header class="page-head">
+    <div>
+      <h1>当班码牌台</h1>
+      <p>每口熟化中或注水中的池须挂一张当班码牌；仅挂牌人本人或管理员能改该池池态、登记批次。</p>
+    </div>
+  </header>
+
+  <h2 class="section-title">现行挂牌</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>厂区</th>
+        <th>熟化池</th>
+        <th>池态</th>
+        <th>挂牌人</th>
+        <th>挂牌时刻</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tag in active_tags %}
+      <tr>
+        <td>{{ tag.pond.plant.name }}</td>
+        <td><strong>{{ tag.pond.code }}</strong></td>
+        <td>
+          {% set st = tag.pond.status %}
+          {% if st == 'filling' %}<span class="badge badge-filling">注水中</span>
+          {% elif st == 'slaking' %}<span class="badge badge-slaking">熟化中</span>
+          {% else %}<span class="badge badge-drawn">已出灰</span>{% endif %}
+        </td>
+        <td>
+          <span class="holder-chip"><span class="nav-abbr">{{ tag.holder.abbr }}</span>{{ tag.holder.username }}</span>
+        </td>
+        <td>{{ tag.hung_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td>
+          {% if tag.holder_id == current_user.id or current_user.is_admin %}
+          <form method="post" action="{{ url_for('tags.remove', tag_id=tag.id) }}">
+            <button type="submit" class="btn ghost btn-sm">摘牌</button>
+          </form>
+          {% else %}
+          <span class="hint">仅挂牌人或管理员可摘</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6">当前没有任何现行挂牌</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="section-title">挂牌</h2>
+  <form class="panel hang-form" method="post" action="{{ url_for('tags.hang') }}">
+    <label>熟化池
+      <select name="pond_id" required>
+        <option value="" disabled selected>请选择池号</option>
+        {% for pond in hangable %}
+        <option value="{{ pond.id }}">{{ pond.code }} · {{ pond.plant.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if current_user.is_admin %}
+    <label>挂牌人（管理员可代挂）
+      <select name="holder_id">
+        {% for user in holders %}
+        <option value="{{ user.id }}" {% if user.id == current_user.id %}selected{% endif %}>
+          {{ user.username }}{% if user.is_admin %}（管理员）{% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </label>
+    {% else %}
+    <p class="hint">操作工只能为自己挂牌：挂牌人 = <strong>{{ current_user.username }}</strong>。</p>
+    {% endif %}
+    {% if not hangable %}
+    <p class="hint">暂无可挂池位（所有池均有未摘牌）；已出灰池须先由挂牌人本人或管理员摘除旧牌，才能重新挂牌。</p>
+    {% endif %}
+    <div class="actions">
+      <button type="submit" {% if not hangable %}disabled{% endif %}>挂牌</button>
+      <a class="btn ghost" href="{{ url_for('board.floor_plan') }}">返回平面图</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

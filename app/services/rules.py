@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from app.models import Pond, SlakeBatch
+from flask_login import UserMixin
+
+from app.extensions import db
+from app.models import Pond, ShiftTag, SlakeBatch, utcnow
 
 MIN_PEAK_TEMP_FOR_DRAWN = 60.0
 
@@ -42,3 +45,61 @@ def assert_can_set_pond_status(pond: Pond, new_status: str) -> None:
         ok, msg = can_mark_pond_drawn(pond)
         if not ok:
             raise RuleError(msg)
+
+
+# ---------------------------------------------------------------------------
+# 当班码牌
+# ---------------------------------------------------------------------------
+
+def is_admin(user: UserMixin) -> bool:
+    return bool(getattr(user, "is_admin", False))
+
+
+def assert_can_hang_tag(pond: Pond, user: UserMixin, holder: UserMixin) -> None:
+    """挂牌前核对：旧牌须已摘除；已出灰池须先摘旧牌才能重挂；代挂须管理员。"""
+    active = pond.active_tag
+    if active is not None:
+        if pond.status == Pond.STATUS_DRAWN:
+            raise RuleError("该池已出灰，禁止新挂；请先由挂牌人本人或管理员摘除旧牌")
+        raise RuleError(
+            f"该池已有 {active.holder.username} 的未摘码牌，同一池未摘牌最多一张"
+        )
+    if holder.id != user.id and not is_admin(user):
+        raise RuleError("操作工只能为自己挂牌，不能代他人挂牌")
+
+
+def hang_tag(pond: Pond, user: UserMixin, holder: UserMixin) -> ShiftTag:
+    """构造并写入一张码牌（不提交，提交由调用方负责以兜住并发冲突）。"""
+    assert_can_hang_tag(pond, user, holder)
+    tag = ShiftTag(pond_id=pond.id, holder_id=holder.id, hung_at=utcnow())
+    db.session.add(tag)
+    return tag
+
+
+def assert_can_remove_tag(tag: ShiftTag, user: UserMixin) -> None:
+    if tag.removed_at is not None:
+        raise RuleError("该码牌已摘除，无需重复摘牌")
+    if tag.holder_id != user.id and not is_admin(user):
+        raise RuleError("仅挂牌人本人或管理员可摘牌")
+
+
+def remove_tag(tag: ShiftTag, user: UserMixin) -> None:
+    assert_can_remove_tag(tag, user)
+    tag.removed_at = utcnow()
+
+
+def assert_pond_operable(pond: Pond, user: UserMixin, action: str) -> ShiftTag:
+    """
+    改池态 / 登记批次的统一入口核对：
+    该池须有未摘牌，且当前登录用户是挂牌人本人或管理员。
+    通过则返回现行码牌，否则抛中文 RuleError。
+    """
+    tag = pond.active_tag
+    if tag is None:
+        raise RuleError(f"该池当前没有未摘码牌，不能{action}；请先到码牌台挂牌")
+    if tag.holder_id != user.id and not is_admin(user):
+        raise RuleError(
+            f"该池码牌由 {tag.holder.username} 挂出，"
+            f"只有挂牌人本人或管理员能{action}"
+        )
+    return tag

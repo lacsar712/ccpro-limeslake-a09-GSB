@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
+from sqlalchemy import Index, text
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
@@ -17,6 +18,21 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(64), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="worker")
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == "admin"
+
+    @property
+    def abbr(self) -> str:
+        """瓦片上展示的挂牌人缩写：英文取首字母并带尾部数字，中文取末一至两字。"""
+        name = (self.username or "").strip()
+        if not name:
+            return "?"
+        if name[0].isascii() and name[0].isalpha():
+            digits = name[len(name.rstrip("0123456789")):]
+            return name[0].upper() + digits
+        return name[-2:] if len(name) >= 2 else name
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
@@ -62,6 +78,42 @@ class Pond(db.Model):
         back_populates="pond",
         cascade="all, delete-orphan",
     )
+    tags = db.relationship(
+        "ShiftTag",
+        back_populates="pond",
+        cascade="all, delete-orphan",
+    )
+
+    @property
+    def active_tag(self) -> "ShiftTag | None":
+        """该池当前未摘牌（摘牌时刻为空）的码牌，至多一张。"""
+        return next((t for t in self.tags if t.removed_at is None), None)
+
+
+class ShiftTag(db.Model):
+    """当班码牌：一口熟化中或注水中的池挂一张，摘牌时刻为空表示现行。"""
+
+    __tablename__ = "shift_tags"
+    __table_args__ = (
+        # 同一池至多一张未摘牌（removed_at IS NULL）的码牌。
+        # 两名操作工并发抢挂时由数据库直接挡住第二张。
+        Index(
+            "uq_shift_tag_active_per_pond",
+            "pond_id",
+            unique=True,
+            postgresql_where=text("removed_at IS NULL"),
+            sqlite_where=text("removed_at IS NULL"),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    pond_id = db.Column(db.Integer, db.ForeignKey("ponds.id"), nullable=False)
+    holder_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    hung_at = db.Column(db.DateTime(timezone=True), nullable=False, default=utcnow)
+    removed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    pond = db.relationship("Pond", back_populates="tags")
+    holder = db.relationship("User", foreign_keys=[holder_id])
 
 
 class SlakeBatch(db.Model):

@@ -20,6 +20,14 @@
       </div>
       <nav class="top-nav">
         <a href="{{ url_for('board.floor_plan') }}" class="{% if request.blueprint == 'board' %}active{% endif %}">平面图</a>
+        <a href="{{ url_for('tags.board') }}" class="{% if request.blueprint == 'tags' %}active{% endif %}">码牌台</a>
+        {% if current_user.is_authenticated %}
+        <span class="nav-user">
+          <span class="nav-abbr">{{ current_user.abbr }}</span>
+          {{ current_user.username }}
+          <small>{% if current_user.is_admin %}管理员{% else %}操作工{% endif %}</small>
+        </span>
+        {% endif %}
         <a href="{{ url_for('auth.logout') }}">退出</a>
       </nav>
     </header>

@@ -1,9 +1,14 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.models import Plant, Pond
-from app.services.rules import RuleError, assert_can_set_pond_status, latest_batch_for_pond
+from app.services.rules import (
+    RuleError,
+    assert_can_set_pond_status,
+    assert_pond_operable,
+    latest_batch_for_pond,
+)
 
 bp = Blueprint("board", __name__, url_prefix="/board")
 
@@ -36,15 +41,17 @@ def floor_plan():
     pond_cards = []
     for pond in ponds:
         batch = latest_batch_for_pond(pond)
-        pond_cards.append({"pond": pond, "batch": batch})
+        pond_cards.append({"pond": pond, "batch": batch, "tag": pond.active_tag})
 
     selected_id = request.args.get("pond", type=int)
     selected = None
     selected_batch = None
+    selected_tag = None
     if selected_id:
         selected = next((c["pond"] for c in pond_cards if c["pond"].id == selected_id), None)
         if selected:
             selected_batch = latest_batch_for_pond(selected)
+            selected_tag = selected.active_tag
 
     return render_template(
         "board/floor.html",
@@ -53,6 +60,7 @@ def floor_plan():
         pond_cards=pond_cards,
         selected=selected,
         selected_batch=selected_batch,
+        selected_tag=selected_tag,
         status_labels=STATUS_LABELS,
     )
 
@@ -61,6 +69,14 @@ def floor_plan():
 @login_required
 def pond_ops(pond_id: int):
     pond = Pond.query.get_or_404(pond_id)
+
+    # 统一入口：改池态 / 登记峰值前先核对当班码牌。
+    try:
+        assert_pond_operable(pond, current_user, "修改池态或登记作业记录")
+    except RuleError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("board.floor_plan", plant_id=pond.plant_id, pond=pond.id))
+
     status = request.form.get("status") or pond.status
     peak_raw = (request.form.get("peak_temp_c") or "").strip()
     notes = (request.form.get("batch_notes") or "").strip()
@@ -84,6 +100,7 @@ def pond_ops(pond_id: int):
     batch.notes = notes
 
     try:
+        # 出灰峰值门槛照旧，并与码牌核对收在同一入口。
         assert_can_set_pond_status(pond, status)
         pond.status = status
         db.session.commit()

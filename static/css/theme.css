@@ -90,6 +90,34 @@ body {
   color: #ecfccb;
 }
 
+.nav-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid rgba(203, 213, 225, 0.35);
+  border-radius: 999px;
+}
+
+.nav-user small { color: #94a3b8; }
+
+.nav-abbr,
+.tile-tag {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--lime-ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
 .ops-main {
   flex: 1;
   padding: 24px 28px 40px;
@@ -205,6 +233,27 @@ body {
   font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: 0.04em;
+}
+
+.tile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tile-tag {
+  min-width: 30px;
+  height: 30px;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 6px rgba(54, 83, 20, 0.25);
+}
+
+.tile-tag-none {
+  background: rgba(148, 163, 184, 0.32);
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 0.7rem;
 }
 
 .tile-status { font-weight: 700; font-size: 0.95rem; }
@@ -347,6 +396,50 @@ button:hover, .btn:hover { background: #1e293b; }
 }
 
 .hint { color: var(--muted); font-size: 0.88rem; margin: 0; }
+
+/* 当班码牌 */
+.tag-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  background: #fff;
+}
+
+.tag-card.tag-on { border-color: var(--lime-mid); background: #f7fee7; }
+.tag-card.tag-off { border-style: dashed; background: rgba(226, 232, 240, 0.45); }
+.tag-card h3 { margin: 0; }
+.tag-card form { margin: 0; }
+.tag-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.holder-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--slate);
+}
+
+.section-title {
+  margin: 22px 0 10px;
+  font-size: 1.05rem;
+  color: var(--slate-deep);
+}
+
+.hang-form { max-width: 560px; }
+.hang-form form, .data-table form { margin: 0; }
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
 
 .flash-stack { margin-bottom: 16px; display: grid; gap: 8px; }
 .flash { padding: 10px 12px; border-radius: 8px; }

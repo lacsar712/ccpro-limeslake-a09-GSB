@@ -1,10 +1,11 @@
 from datetime import datetime
 
 from flask import Blueprint, flash, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from app.extensions import db
-from app.models import Pond, SlakeBatch
+from app.models import Pond, SlakeBatch, utcnow
+from app.services.rules import RuleError, assert_pond_operable
 
 bp = Blueprint("batches", __name__, url_prefix="/batches")
 
@@ -26,6 +27,17 @@ def create_batch():
     ponds = Pond.query.order_by(Pond.code).all()
     if request.method == "POST":
         pond_id = int(request.form["pond_id"])
+        pond = db.session.get(Pond, pond_id)
+        if pond is None:
+            flash("所选熟化池不存在", "error")
+            return render_template("batches/form.html", ponds=ponds, batch=None)
+        try:
+            # 登记批次前核对：目标池须有本人（或管理员）的未摘码牌。
+            assert_pond_operable(pond, current_user, "登记批次")
+        except RuleError as exc:
+            flash(str(exc), "error")
+            return render_template("batches/form.html", ponds=ponds, batch=None)
+
         started_raw = request.form.get("started_at") or ""
         target = float(request.form.get("target_temp_c") or 80)
         peak_raw = (request.form.get("peak_temp_c") or "").strip()
@@ -33,7 +45,7 @@ def create_batch():
         started_at = (
             datetime.fromisoformat(started_raw)
             if started_raw
-            else datetime.utcnow()
+            else utcnow()
         )
         peak = float(peak_raw) if peak_raw else None
         batch = SlakeBatch(
@@ -46,11 +58,10 @@ def create_batch():
         db.session.add(batch)
         db.session.commit()
         flash("熟化批次已登记", "ok")
-        pond = db.session.get(Pond, pond_id)
         return redirect(
             url_for(
                 "board.floor_plan",
-                plant_id=pond.plant_id if pond else None,
+                plant_id=pond.plant_id,
                 pond=pond_id,
             )
         )
@@ -63,7 +74,20 @@ def edit_batch(batch_id: int):
     batch = SlakeBatch.query.get_or_404(batch_id)
     ponds = Pond.query.order_by(Pond.code).all()
     if request.method == "POST":
-        batch.pond_id = int(request.form["pond_id"])
+        pond_id = int(request.form["pond_id"])
+        pond = db.session.get(Pond, pond_id)
+        if pond is None:
+            flash("所选熟化池不存在", "error")
+            return render_template("batches/form.html", ponds=ponds, batch=batch)
+        try:
+            # 改挂到别的池也须持有该池的未摘码牌。
+            assert_pond_operable(pond, current_user, "登记批次")
+        except RuleError as exc:
+            db.session.rollback()
+            flash(str(exc), "error")
+            return render_template("batches/form.html", ponds=ponds, batch=batch)
+
+        batch.pond_id = pond_id
         started_raw = request.form.get("started_at") or ""
         if started_raw:
             batch.started_at = datetime.fromisoformat(started_raw)
@@ -76,8 +100,8 @@ def edit_batch(batch_id: int):
         return redirect(
             url_for(
                 "board.floor_plan",
-                plant_id=batch.pond.plant_id,
-                pond=batch.pond_id,
+                plant_id=pond.plant_id,
+                pond=pond_id,
             )
         )
     return render_template("batches/form.html", ponds=ponds, batch=batch)
